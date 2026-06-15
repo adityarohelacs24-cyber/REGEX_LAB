@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regex Lab — Patterns, Automata &amp; the Parcel Sorting Validator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12161c;
+    --panel:#1b222b;
+    --panel-border:#2c3640;
+    --ink:#edeff2;
+    --mist:#8995a3;
+    --amber:#ffb454;
+    --accept:#4ade94;
+    --reject:#ff6b6b;
+    --radius:10px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'IBM Plex Sans', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:var(--font-display); margin:0; line-height:1.15; }
+  p{ margin:0; }
+  a{ color:var(--amber); }
+  code, .mono{ font-family:var(--font-mono); }
+
+  .container{ max-width:1100px; margin:0 auto; padding:0 1.5rem; }
+  .section{ padding:4.5rem 0; border-bottom:1px solid var(--panel-border); }
+  .section:last-of-type{ border-bottom:none; }
+
+  .eyebrow{
+    font-family:var(--font-mono);
+    color:var(--amber);
+    font-size:0.8rem;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    margin-bottom:0.8rem;
+    display:block;
+  }
+  .section-title{ font-size:clamp(1.6rem,3.2vw,2.2rem); font-weight:700; margin-bottom:1rem; }
+  .lede{ color:var(--mist); max-width:640px; font-size:1.02rem; margin-bottom:2rem; }
+
+  /* ---------- Nav ---------- */
+  header.nav{
+    position:sticky; top:0; z-index:50;
+    background:rgba(18,22,28,0.88);
+    backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--panel-border);
+  }
+  .nav-inner{
+    max-width:1100px; margin:0 auto; padding:0.9rem 1.5rem;
+    display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  }
+  .brand{
+    font-family:var(--font-mono); font-weight:700; color:var(--amber);
+    letter-spacing:0.04em; font-size:1.05rem; text-decoration:none; white-space:nowrap;
+  }
+  .brand span{ color:var(--mist); font-weight:400; }
+  .nav-links{
+    display:flex; gap:1.4rem; list-style:none; margin:0; padding:0;
+    overflow-x:auto; scrollbar-width:none;
+  }
+  .nav-links::-webkit-scrollbar{ display:none; }
+  .nav-links a{
+    color:var(--mist); text-decoration:none; font-size:0.88rem;
+    font-family:var(--font-display); font-weight:500; white-space:nowrap; transition:color .15s;
+  }
+  .nav-links a:hover, .nav-links a:focus-visible{ color:var(--ink); }
+
+  /* ---------- Hazard tape ---------- */
+  .tape{
+    height:10px;
+    background:repeating-linear-gradient(45deg, var(--amber) 0 16px, var(--bg) 16px 32px);
+    opacity:0.45;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    padding:4.5rem 0 3.5rem;
+    text-align:center;
+  }
+  .hero .container{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .hero h1{ font-size:clamp(2.1rem,5.5vw,3.4rem); margin:0 auto 1.1rem; max-width:760px; }
+  .hero .lede{ margin:0 auto 2.5rem; max-width:680px; }
+
+  /* ---------- Scanner component ---------- */
+  .scanner{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:var(--radius);
+    padding:1.5rem;
+    max-width:560px;
+  }
+  .scanner-pattern{
+    font-family:var(--font-mono);
+    color:var(--amber);
+    font-size:0.92rem;
+    letter-spacing:0.02em;
+    margin-bottom:1.1rem;
+    word-break:break-all;
+  }
+  .scanner-track{
+    position:relative;
+    display:flex; flex-wrap:wrap; gap:0.5rem;
+    margin-bottom:1.1rem;
+    min-height:60px;
+  }
+  .cell{
+    width:54px; height:54px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-mono); font-size:1.4rem; font-weight:700;
+    background:var(--bg);
+    border:2px solid var(--panel-border);
+    border-radius:6px;
+    color:var(--mist);
+    transition:border-color .25s, color .25s, background-color .25s, box-shadow .25s;
+  }
+  .cell.scanning{ border-color:var(--amber); color:var(--ink); box-shadow:0 0 0 3px rgba(255,180,84,0.15); }
+  .cell.valid{ border-color:var(--accept); color:var(--accept); background:rgba(74,222,148,0.08); }
+  .cell.invalid{ border-color:var(--reject); color:var(--reject); background:rgba(255,107,107,0.08); }
+
+  .scanner-beam{
+    position:absolute; top:-3px; bottom:-3px; width:4px; left:0;
+    background:var(--amber); box-shadow:0 0 16px var(--amber);
+    border-radius:2px; opacity:0;
+    transition:left .32s ease, opacity .2s ease;
+  }
+  .scanner-beam.active{ opacity:1; }
+
+  .scanner-trace{
+    display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;
+    font-family:var(--font-mono); font-size:0.82rem; color:var(--mist);
+    margin-bottom:1rem;
+  }
+  .scanner-trace .state{
+    padding:2px 9px; border:1px solid var(--panel-border); border-radius:4px;
+    transition:border-color .2s, color .2s;
+  }
+  .scanner-trace .arrow{ color:var(--panel-border); }
+  .scanner-trace .state.active{ border-color:var(--amber); color:var(--ink); }
+  .scanner-trace .state.accept{ border-color:var(--accept); color:var(--accept); }
+  .scanner-trace .state.trap{ border-color:var(--reject); color:var(--reject); }
+
+  .scanner-verdict{
+    display:inline-block;
+    font-family:var(--font-display); font-weight:700; font-size:0.95rem;
+    letter-spacing:0.06em; text-transform:uppercase;
+    padding:0.4rem 1rem;
+    border:2px solid var(--panel-border);
+    border-radius:6px;
+    transform:rotate(-3deg);
+    opacity:0;
+    transition:opacity .2s ease;
+  }
+  .scanner-verdict.show{ opacity:1; }
+  .scanner-verdict.accept{ color:var(--accept); border-color:var(--accept); }
+  .scanner-verdict.reject{ color:var(--reject); border-color:var(--reject); }
+
+  .hero-caption{ margin:1.2rem auto 0; font-size:0.9rem; color:var(--mist); max-width:560px; text-align:center; }
+
+  /* ---------- Tables ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:0.92rem; }
+  th,td{ text-align:left; padding:0.7rem 0.9rem; border-bottom:1px solid var(--panel-border); vertical-align:top; }
+  th{
+    color:var(--mist); font-family:var(--font-display); text-transform:uppercase;
+    font-size:0.72rem; letter-spacing:0.1em; font-weight:600;
+  }
+  td code{ color:var(--amber); }
+  .table-wrap{ overflow-x:auto; background:var(--panel); border:1px solid var(--panel-border); border-radius:var(--radius); }
+  .table-wrap table{ min-width:560px; }
+
+  /* ---------- Mapping cards (regex <-> automata) ---------- */
+  .map-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; }
+  .map-card{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:var(--radius);
+    padding:1.3rem;
+  }
+  .map-card .frag{ font-family:var(--font-mono); font-size:1.15rem; color:var(--amber); margin-bottom:0.7rem; }
+  .map-card .arrow-down{ color:var(--panel-border); margin:0.4rem 0; font-size:1.1rem; }
+  .map-card .trans{ font-family:var(--font-mono); font-size:0.92rem; color:var(--accept); margin-bottom:0.6rem; }
+  .map-card p{ color:var(--mist); font-size:0.88rem; }
+  .map-card.trap{ border-style:dashed; border-color:var(--reject); }
+  .map-card.trap .trans{ color:var(--reject); }
+  .map-card.trap .frag{ color:var(--reject); }
+
+  /* ---------- Case study ---------- */
+  .case-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:2rem; align-items:start; }
+  @media (max-width:840px){ .case-grid{ grid-template-columns:1fr; } }
+
+  .field-row{ display:flex; gap:0.7rem; flex-wrap:wrap; margin-bottom:1.2rem; }
+  input[type=text]{
+    background:var(--bg); border:1px solid var(--panel-border); color:var(--ink);
+    font-family:var(--font-mono); padding:0.65rem 0.9rem; border-radius:6px;
+    font-size:1rem; width:160px; letter-spacing:0.05em; text-transform:uppercase;
+  }
+  textarea{
+    background:var(--bg); border:1px solid var(--panel-border); color:var(--ink);
+    font-family:var(--font-mono); padding:0.7rem 0.9rem; border-radius:6px;
+    font-size:0.92rem; width:100%; resize:vertical;
+  }
+  input:focus, textarea:focus, button:focus-visible{
+    outline:2px solid var(--amber); outline-offset:2px;
+  }
+  button{
+    background:var(--amber); color:#1a1206; border:none;
+    font-family:var(--font-display); font-weight:700; font-size:0.92rem;
+    padding:0.65rem 1.3rem; border-radius:6px; cursor:pointer; letter-spacing:0.02em;
+    transition:filter .15s;
+  }
+  button:hover{ filter:brightness(1.08); }
+  button.secondary{
+    background:transparent; border:1px solid var(--panel-border); color:var(--ink);
+    font-family:var(--font-mono); font-weight:500; padding:0.5rem 0.9rem; font-size:0.82rem;
+  }
+  button.secondary:hover{ border-color:var(--amber); color:var(--amber); }
+
+  .code-block{
+    background:var(--bg); border:1px solid var(--panel-border); border-radius:6px;
+    padding:0.9rem 1.1rem; font-family:var(--font-mono); font-size:0.85rem;
+    color:var(--mist); overflow-x:auto;
+  }
+  .code-block .kw{ color:var(--amber); }
+  .code-block .res{ color:var(--accept); }
+
+  .live-check{
+    margin-top:1.2rem; font-family:var(--font-mono); font-size:0.85rem; color:var(--mist);
+    padding:0.8rem 1rem; background:var(--bg); border:1px solid var(--panel-border); border-radius:6px;
+  }
+  .live-check .true{ color:var(--accept); }
+  .live-check .false{ color:var(--reject); }
+
+  /* ---------- Playground ---------- */
+  .pg-controls{ display:flex; flex-direction:column; gap:1rem; margin-bottom:1.2rem; }
+  .pg-row{ display:flex; gap:0.8rem; flex-wrap:wrap; align-items:center; }
+  .pg-row label{ font-size:0.85rem; color:var(--mist); display:flex; align-items:center; gap:0.4rem; }
+  .pg-pattern-wrap{
+    display:flex; align-items:stretch; flex:1; min-width:240px;
+    background:var(--bg); border:1px solid var(--panel-border); border-radius:6px; overflow:hidden;
+  }
+  .pg-pattern-wrap span{
+    font-family:var(--font-mono); color:var(--mist); padding:0.65rem 0 0.65rem 0.9rem; font-size:1rem;
+  }
+  .pg-pattern-wrap input{
+    border:none; background:transparent; flex:1; width:auto; text-transform:none;
+  }
+  .pg-pattern-wrap input:focus{ outline:none; }
+  .pg-pattern-wrap.error{ border-color:var(--reject); }
+
+  .preset-row{ display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1.2rem; }
+
+  .highlighted-output{
+    background:var(--bg); border:1px solid var(--panel-border); border-radius:6px;
+    padding:0.9rem 1rem; font-family:var(--font-mono); font-size:0.92rem;
+    white-space:pre-wrap; word-break:break-word; min-height:90px; margin-bottom:0.6rem;
+  }
+  .highlighted-output mark{
+    background:rgba(255,180,84,0.22); color:var(--amber); border-radius:3px; padding:0 2px;
+  }
+  .pg-meta{ font-family:var(--font-mono); font-size:0.85rem; color:var(--mist); margin-bottom:2rem; min-height:1.2em; }
+  .pg-meta .err{ color:var(--reject); }
+
+  .cheat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0.7rem; }
+  .cheat-item{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:8px;
+    padding:0.8rem 1rem; font-size:0.86rem; display:flex; flex-direction:column; gap:0.2rem;
+  }
+  .cheat-item code{ color:var(--amber); font-size:0.95rem; }
+  .cheat-item span{ color:var(--mist); }
+
+  /* ---------- Footer ---------- */
+  footer{ padding:2.5rem 0; text-align:center; color:var(--mist); font-size:0.85rem; }
+  footer .mono{ color:var(--panel-border); }
+
+  /* ---------- Reduced motion ---------- */
+  @media (prefers-reduced-motion:reduce){
+    *{ animation-duration:0.01ms !important; transition-duration:0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="#" class="brand">regex<span>://</span>lab</a>
+    <ul class="nav-links">
+      <li><a href="#blocks">Building Blocks</a></li>
+      <li><a href="#equivalence">Regex ↔ Automata</a></li>
+      <li><a href="#case-study">Parcel Validator</a></li>
+      <li><a href="#playground">Playground</a></li>
+    </ul>
+  </div>
+</header>
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="container">
+    <span class="eyebrow">Theoretical Foundations of Computation · Regex Module</span>
+    <h1>Every pattern is a tiny machine.</h1>
+    <p class="lede">
+      A regular expression is just a compact way of writing down a regular language —
+      the very same language a DFA accepts, symbol by symbol. Our Parcel Sorting System
+      project showed the DFA side. This page shows the other side: the pattern
+      <code>(S+M+L)(1+2+3)(H+N)</code>, and what it looks like when a parcel code is
+      scanned against it.
+    </p>
+
+    <div style="display:flex;justify-content:center;width:100%;"><div class="scanner" id="hero-scanner"></div></div>
+    <p class="hero-caption">
+      Watch the scan above: each character is checked against its expected position —
+      type, then zone, then priority — exactly the way the DFA's transition table reads
+      one symbol at a time and moves between <code>q0 → q1 → q2 → q3</code>, or falls
+      into the trap state <code>q4</code>.
+    </p>
+  </div>
+</section>
+
+<div class="tape"></div>
+
+<!-- ================= SECTION 1: BUILDING BLOCKS ================= -->
+<section class="section" id="blocks">
+  <div class="container">
+    <span class="eyebrow">01 — Vocabulary</span>
+    <h2 class="section-title">The grammar of a pattern</h2>
+    <p class="lede">
+      Every regular expression, no matter how complicated, is built from a handful of
+      operators. The same small set of operators is enough to describe our parcel code,
+      and also enough to describe any regular language a DFA can recognise.
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Operator</th><th>Name</th><th>Meaning</th><th>In the parcel pattern</th></tr>
+        </thead>
+        
+<tbody>
+<tr><td><code>ε</code></td><td>Empty String</td><td>String of length 0</td><td>Represents no symbol being read</td></tr>
+<tr><td><code>+</code></td><td>Union</td><td>Choice between expressions</td><td>(S+M+L)</td></tr>
+<tr><td>ab</td><td>Concatenation</td><td>Symbols appear in sequence</td><td>(S+M+L)(1+2+3)(H+N)</td></tr>
+<tr><td><code>*</code></td><td>Kleene Star</td><td>Zero or more repetitions</td><td>a* = ε,a,aa,aaa...</td></tr>
+<tr><td><code>()</code></td><td>Grouping</td><td>Controls precedence</td><td>(a+b)*</td></tr>
+<tr><td><code>Σ</code></td><td>Alphabet</td><td>Set of valid symbols</td><td>Σ={S,M,L,1,2,3,H,N}</td></tr>
+<tr><td><code>Σ*</code></td><td>Kleene Closure</td><td>All strings over Σ</td><td>All finite strings from Σ</td></tr>
+<tr><td><code>∅</code></td><td>Empty Language</td><td>Contains no strings</td><td>No accepted strings</td></tr>
+</tbody>
+
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECTION 2: REGEX <-> AUTOMATA ================= -->
+<section class="section" id="equivalence">
+  <div class="container">
+    <span class="eyebrow">02 — Equivalence</span>
+    <h2 class="section-title">Same language, two notations</h2>
+    <p class="lede">
+      A classic result in automata theory (Kleene's theorem) says that DFAs, NFAs and
+      regular expressions all describe exactly the same family of languages — the
+      regular languages. Anything one of them can express, the others can too. Our
+      Parcel Sorting DFA, with states <code>q0…q4</code> and accepting state
+      <code>q3</code>, and the regular expression <code>(S+M+L)(1+2+3)(H+N)</code> are
+      two notations for the identical set of accepted strings. The map below lines up
+      each fragment of the regex with the transition it corresponds to.
+    </p>
+
+    <div class="map-grid">
+      <div class="map-card">
+        <div class="frag">(S|M|L)</div>
+        <div class="arrow-down">↓</div>
+        <div class="trans">q0 —S,M,L→ q1</div>
+        <p>The first group fixes which symbols are allowed to move the machine out of the start state.</p>
+      </div>
+      <div class="map-card">
+        <div class="frag">(1|2|3)</div>
+        <div class="arrow-down">↓</div>
+        <div class="trans">q1 —1,2,3→ q2</div>
+        <p>The second group fixes the symbols that move the machine from "type read" to "zone read".</p>
+      </div>
+      <div class="map-card">
+        <div class="frag">(H|N)</div>
+        <div class="arrow-down">↓</div>
+        <div class="trans">q2 —H,N→ q3 ✓</div>
+        <p>The third group moves the machine into <code>q3</code> — the only accepting state.</p>
+      </div>
+      <div class="map-card trap">
+        <div class="frag">anything else</div>
+        <div class="arrow-down">↓</div>
+        <div class="trans">q* —other→ q4</div>
+        <p>Any symbol not listed for the current position — or any extra symbol after the third — sends the machine to the trap state <code>q4</code>, which loops on everything and never accepts.</p>
+      </div>
+    </div>
+
+    <p class="lede" style="margin-top:2rem; margin-bottom:0;">
+      The anchors <code>^</code> and <code>$</code> in the regex do the same job as the
+      trap state in the DFA: both guarantee that nothing extra — no fourth character,
+      no empty input — can sneak through and still be accepted.
+    </p>
+  </div>
+</section>
+
+<!-- ================= SECTION 3: CASE STUDY ================= -->
+<section class="section" id="case-study">
+  <div class="container">
+    <span class="eyebrow">03 — Applied</span>
+    <h2 class="section-title">The parcel code validator, live</h2>
+    <p class="lede">
+      Recap: every parcel carries a 3-character code — <strong>type</strong>
+      (<code>S</code>/<code>M</code>/<code>L</code>), <strong>zone</strong>
+      (<code>1</code>/<code>2</code>/<code>3</code>) and <strong>priority</strong>
+      (<code>H</code>/<code>N</code>). A valid code is routed to a bin by type;
+      anything else goes to the exception bin. Type a code (try
+      <code>S1H</code>, <code>L4B</code>, or <code>12A</code>) and scan it.
+    </p>
+
+    <div class="case-grid">
+      <div>
+        <div class="field-row">
+          <input type="text" id="parcel-input" maxlength="5" value="S1H" aria-label="Parcel code">
+          <button id="scan-btn">Scan parcel</button>
+        </div>
+        <div class="scanner" id="case-scanner"></div>
+      </div>
+      <div>
+        <div class="code-block">
+<span class="kw">const</span> pattern = /^[SML][123][HN]$/;<br>
+<span class="kw">const</span> code = <span id="code-echo">"S1H"</span>;<br>
+pattern.test(code); <span class="kw">// →</span> <span id="test-result" class="res">true</span>
+        </div>
+        <div class="live-check" id="live-check" aria-live="polite">
+          Type a code and press <strong>Scan parcel</strong> to see the regex check and the DFA state trace update together.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECTION 4: PLAYGROUND ================= -->
+<section class="section" id="playground">
+  <div class="container">
+    <span class="eyebrow">04 — Practice</span>
+    <h2 class="section-title">Regex playground</h2>
+    <p class="lede">
+      Try the parcel pattern, one of the presets, or write your own. Matches are
+      highlighted live in the test string below.
+    </p>
+
+    <div class="preset-row">
+      <button class="secondary" data-preset="parcel">Parcel code</button>
+      <button class="secondary" data-preset="email">Email address</button>
+      <button class="secondary" data-preset="phone">Phone number</button>
+      <button class="secondary" data-preset="hex">Hex colour</button>
+      <button class="secondary" data-preset="capitals">Capitalised words</button>
+      
+    </div>
+
+    
+<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:8px;padding:12px;margin-bottom:16px">
+<h3 style="margin-bottom:8px">Formal Regular Expression (TFC)</h3>
+<div id="tfc-display" class="mono" style="color:var(--amber)">(S+M+L)(1+2+3)(H+N)</div>
+<div style="margin-top:10px;color:var(--mist)">Implementation Regex (JavaScript)</div>
+<div id="engine-display" class="mono">^[SML][123][HN]$</div>
+</div>
+
+<div class="pg-controls">
+      <div class="pg-row">
+        <div class="pg-pattern-wrap" id="pattern-wrap">
+          <span>/</span>
+          <input type="text" id="pg-pattern" aria-label="Regex pattern" value="^[SML][123][HN]$">
+          <span id="pg-flags-display" style="padding-right:0.9rem;">/gm</span>
+        </div>
+        <label><input type="checkbox" id="flag-g" checked> g</label>
+        <label><input type="checkbox" id="flag-i"> i</label>
+        <label><input type="checkbox" id="flag-m" checked> m</label>
+      </div>
+      <textarea id="pg-test" rows="4" aria-label="Test string">S1H
+L4B
+M3H
+12A
+S22</textarea>
+    </div>
+
+    <div class="highlighted-output" id="pg-output" aria-live="polite"></div>
+    <div class="pg-meta" id="pg-meta"></div>
+
+    
+<h3 style="font-size:1.05rem; margin-bottom:1rem;">TFC Quick Syntax Reference</h3>
+<div class="cheat-grid">
+<div class="cheat-item"><code>ε</code><span>Empty String</span></div>
+<div class="cheat-item"><code>+</code><span>Union</span></div>
+<div class="cheat-item"><code>ab</code><span>Concatenation</span></div>
+<div class="cheat-item"><code>*</code><span>Kleene Star</span></div>
+<div class="cheat-item"><code>(a+b)</code><span>Grouping</span></div>
+<div class="cheat-item"><code>Σ</code><span>Alphabet</span></div>
+<div class="cheat-item"><code>Σ*</code><span>Kleene Closure</span></div>
+<div class="cheat-item"><code>∅</code><span>Empty Language</span></div>
+</div>
+</div>
+</section>
+
+
+<footer>
+  <p>Regex Lab — Interactive Regular Expression Playground</p>
+</footer>
+
+<script>
+  // ---------------------------------------------------------------
+  // Shared: parcel-code evaluation against the DFA / regex
+  // ---------------------------------------------------------------
+  const PARCEL_SETS = [['S','M','L'], ['1','2','3'], ['H','N']];
+  const BIN = { S:'Bin A', M:'Bin B', L:'Bin C' };
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function evaluateParcel(rawCode){
+    const chars = rawCode.toUpperCase().split('');
+    const total = Math.max(chars.length, 3);
+    const cellResults = [];
+    const trace = ['q0'];
+    let trapped = false;
+
+    for (let i=0;i<total;i++){
+      const ch = chars[i];
+      let ok = false;
+      if (!trapped && i < 3 && ch !== undefined && PARCEL_SETS[i].includes(ch)){
+        ok = true;
+      }
+      if (!ok) trapped = true;
+      cellResults.push({ ch: ch === undefined ? '·' : ch, ok, missing: ch === undefined });
+      trace.push(trapped ? 'q4' : 'q' + (i+1));
+    }
+    const accepted = chars.length === 3 && !trapped;
+    return { cellResults, trace, accepted, type: chars[0] };
+  }
+
+  // ---------------------------------------------------------------
+  // Scanner widget: builds + animates the cell/trace/verdict UI
+  // ---------------------------------------------------------------
+  function scannerTemplate(patternLabel){
+    return `
+      <div class="scanner-pattern">${patternLabel}</div>
+      <div class="scanner-track"><div class="scanner-beam"></div></div>
+      <div class="scanner-trace"></div>
+      <div class="scanner-verdict"></div>
+    `;
+  }
+
+  function animateScan(container, code){
+    const { cellResults, trace, accepted, type } = evaluateParcel(code || '');
+    const track   = container.querySelector('.scanner-track');
+    const beam    = container.querySelector('.scanner-beam');
+    const traceEl = container.querySelector('.scanner-trace');
+    const verdict = container.querySelector('.scanner-verdict');
+
+    // reset
+    track.querySelectorAll('.cell').forEach(c => c.remove());
+    cellResults.forEach(cr => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.textContent = cr.ch;
+      track.appendChild(cell);
+    });
+
+    traceEl.innerHTML = trace
+      .map((s,i) => `<span class="state" data-i="${i}">${s}</span>`)
+      .join('<span class="arrow">→</span>');
+
+    verdict.classList.remove('show','accept','reject');
+    verdict.textContent = '';
+    beam.classList.remove('active');
+
+    const cells = [...track.querySelectorAll('.cell')];
+    const stateEls = [...traceEl.querySelectorAll('.state')];
+    cells.forEach(c => c.classList.remove('scanning','valid','invalid'));
+    stateEls.forEach(s => s.classList.remove('active','accept','trap'));
+
+    const STEP_DELAY = reduceMotion ? 0 : 450;
+
+    let i = 0;
+    function step(){
+      if (i > 0){
+        cells[i-1].classList.remove('scanning');
+        cells[i-1].classList.add(cellResults[i-1].ok ? 'valid' : 'invalid');
+      }
+      if (i < cells.length){
+        const cellRect = cells[i].getBoundingClientRect();
+        const trackRect = track.getBoundingClientRect();
+        beam.style.left = (cellRect.left - trackRect.left) + 'px';
+        beam.classList.add('active');
+        cells[i].classList.add('scanning');
+
+        stateEls.forEach(s => s.classList.remove('active'));
+        const stateEl = stateEls[i+1];
+        if (stateEl) stateEl.classList.add('active');
+
+        i++;
+        setTimeout(step, STEP_DELAY);
+      } else {
+        beam.classList.remove('active');
+        const lastState = stateEls[stateEls.length-1];
+        if (lastState) lastState.classList.add(accepted ? 'accept' : 'trap');
+        verdict.classList.add('show', accepted ? 'accept' : 'reject');
+        verdict.textContent = accepted ? `ACCEPT → ${BIN[type]}` : 'REJECT → Exception bin';
+      }
+    }
+    step();
+  }
+
+  // ---------------------------------------------------------------
+  // Hero: auto-cycling demo
+  // ---------------------------------------------------------------
+  const heroScanner = document.getElementById('hero-scanner');
+  heroScanner.innerHTML = scannerTemplate('Pattern:  (S+M+L)(1+2+3)(H+N)   ≡   /^[SML][123][HN]$/');
+
+  const heroCodes = ['S1H', 'L4B', 'M2N', '12A', 'S22', 'L3N'];
+  let heroIdx = 0;
+  function cycleHero(){
+    const code = heroCodes[heroIdx];
+    animateScan(heroScanner, code);
+    const { cellResults } = evaluateParcel(code);
+    heroIdx = (heroIdx + 1) % heroCodes.length;
+    const wait = reduceMotion ? 2600 : (cellResults.length * 450 + 2200);
+    setTimeout(cycleHero, wait);
+  }
+  cycleHero();
+
+  // ---------------------------------------------------------------
+  // Case study: manual scan
+  // ---------------------------------------------------------------
+  const caseScanner = document.getElementById('case-scanner');
+  caseScanner.innerHTML = scannerTemplate('Pattern:  (S+M+L)(1+2+3)(H+N)   ≡   /^[SML][123][HN]$/');
+
+  const parcelInput = document.getElementById('parcel-input');
+  const codeEcho = document.getElementById('code-echo');
+  const testResult = document.getElementById('test-result');
+  const liveCheck = document.getElementById('live-check');
+  const PARCEL_REGEX = /^[SML][123][HN]$/;
+
+  function runCaseStudy(){
+    const raw = parcelInput.value.toUpperCase();
+    animateScan(caseScanner, raw);
+
+    const passes = PARCEL_REGEX.test(raw);
+    codeEcho.textContent = '"' + raw + '"';
+    testResult.textContent = passes;
+    testResult.className = 'res ' + (passes ? '' : '');
+    testResult.style.color = passes ? 'var(--accept)' : 'var(--reject)';
+
+    const { accepted, type, trace } = evaluateParcel(raw);
+    if (accepted){
+      liveCheck.innerHTML = `Regex test → <span class="true">true</span>. The DFA reaches <strong>q3</strong> (accepting), so the parcel is routed to <strong>${BIN[type]}</strong>.`;
+    } else {
+      liveCheck.innerHTML = `Regex test → <span class="false">false</span>. The DFA path is <strong>${trace.join(' → ')}</strong> — once it reaches <strong>q4</strong> it stays there, so the parcel goes to the <strong>exception bin</strong>.`;
+    }
+  }
+
+  document.getElementById('scan-btn').addEventListener('click', runCaseStudy);
+  parcelInput.addEventListener('keydown', e => { if (e.key === 'Enter') runCaseStudy(); });
+  runCaseStudy();
+
+  // ---------------------------------------------------------------
+  // Playground
+  // ---------------------------------------------------------------
+  
+const tfcPresets = {
+ parcel:'(S+M+L)(1+2+3)(H+N)',
+ email:'(L+D)+@(L+D)+.(L)+   where L={a..z,A..Z}, D={0..9}',
+ phone:'(ε+91)(6+7+8+9)(0+1+2+3+4+5+6+7+8+9)^9',
+ hex:'#(0+1+2+3+4+5+6+7+8+9+A+B+C+D+E+F)^6',
+ capitals:'(A+B+C+...+Z)(a+b+c+...+z)*'
+};
+const presets = {
+    parcel:   { pattern: '^[SML][123][HN]$', flags: 'gm', test: 'S1H\nL4B\nM3H\n12A\nS22' },
+    email:    { pattern: '[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}', flags: 'g', test: 'Reach us at support@example.com or sales@example.co.in for help.' },
+    phone:    { pattern: '(?:\\+91[\\s-]?)?[6-9]\\d{9}', flags: 'g', test: 'Call +91 98765-43210 or 9876543210 during business hours.' },
+    hex:      { pattern: '#[0-9A-Fa-f]{6}\\b', flags: 'g', test: 'Palette: #1B222B background, #FFB454 accent, #4ADE94 accept, #zzz123 invalid.' },
+    capitals: { pattern: '\\b[A-Z][a-z]+\\b', flags: 'g', test: 'Visvesvaraya Technological University is located in Belgaum, Karnataka.' }
+  };
+
+  const pgPattern = document.getElementById('pg-pattern');
+  const pgTest = document.getElementById('pg-test');
+  const pgOutput = document.getElementById('pg-output');
+  const pgMeta = document.getElementById('pg-meta');
+  const pgFlagsDisplay = document.getElementById('pg-flags-display');
+  const tfcDisplay = document.getElementById('tfc-display');
+  const engineDisplay = document.getElementById('engine-display');
+  const patternWrap = document.getElementById('pattern-wrap');
+  const flagG = document.getElementById('flag-g');
+  const flagI = document.getElementById('flag-i');
+  const flagM = document.getElementById('flag-m');
+
+  function currentFlags(){
+    return (flagG.checked?'g':'') + (flagI.checked?'i':'') + (flagM.checked?'m':'');
+  }
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, ch => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[ch]));
+  }
+
+  function runPlayground(){
+    const patternStr = pgPattern.value;
+    const flags = currentFlags();
+    const testStr = pgTest.value;
+    pgFlagsDisplay.textContent = '/' + flags;
+
+    let regex;
+    try {
+      regex = new RegExp(patternStr, flags);
+      patternWrap.classList.remove('error');
+    } catch (e){
+      patternWrap.classList.add('error');
+      pgOutput.textContent = testStr;
+      pgMeta.innerHTML = '<span class="err">Invalid pattern — ' + escapeHtml(e.message) + '</span>';
+      return;
+    }
+
+    if (!testStr){
+      pgOutput.innerHTML = '';
+      pgMeta.textContent = '';
+      return;
+    }
+
+    let html = '';
+    let count = 0;
+
+    if (flags.includes('g')){
+      let lastIndex = 0;
+      let m;
+      while ((m = regex.exec(testStr)) !== null){
+        if (m[0] === ''){
+          regex.lastIndex++;
+          continue;
+        }
+        html += escapeHtml(testStr.slice(lastIndex, m.index));
+        html += '<mark>' + escapeHtml(m[0]) + '</mark>';
+        lastIndex = m.index + m[0].length;
+        count++;
+      }
+      html += escapeHtml(testStr.slice(lastIndex));
+    } else {
+      const m = regex.exec(testStr);
+      if (m){
+        html += escapeHtml(testStr.slice(0, m.index));
+        html += '<mark>' + escapeHtml(m[0]) + '</mark>';
+        html += escapeHtml(testStr.slice(m.index + m[0].length));
+        count = 1;
+      } else {
+        html = escapeHtml(testStr);
+      }
+    }
+
+    pgOutput.innerHTML = html;
+    pgMeta.textContent = count + (count === 1 ? ' match' : ' matches');
+  }
+
+  [pgPattern, pgTest].forEach(el => el.addEventListener('input', runPlayground));
+  [flagG, flagI, flagM].forEach(el => el.addEventListener('change', runPlayground));
+
+  document.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = presets[btn.dataset.preset];
+      pgPattern.value = p.pattern;
+      pgTest.value = p.test;
+      flagG.checked = p.flags.includes('g');
+      flagI.checked = p.flags.includes('i');
+      flagM.checked = p.flags.includes('m');
+      if(tfcDisplay) tfcDisplay.textContent = tfcPresets[btn.dataset.preset] || 'Custom';
+      if(engineDisplay) engineDisplay.textContent = p.pattern;
+      runPlayground();
+    });
+  });
+
+  runPlayground();
+</script>
+</body>
+</html>
